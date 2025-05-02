@@ -62,7 +62,7 @@ def keyboardListener(key, x, y):
         pos[0] += TANK_SPEED * speed_multiplier * math.sin(math.radians(rot))
         pos[2] += TANK_SPEED * speed_multiplier * math.cos(math.radians(rot))
         if not check_boundary_collision(pos) and not check_obstacle_collision(pos):
-            game_state['tanks'][0]['position'] = tuple(pos)
+            game_state['tans'][0]['position'] = tuple(pos)
     elif key == b's':
         pos = list(game_state['tanks'][0]['position'])
         rot = game_state['tanks'][0]['rotation']

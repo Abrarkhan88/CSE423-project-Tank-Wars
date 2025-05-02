@@ -1,768 +1,641 @@
-import math
-import time
-import random
 from OpenGL.GL import *
-from OpenGL.GLUT import *  
-from OpenGL.GLUT.fonts import GLUT_BITMAP_HELVETICA_18 
 from OpenGL.GLU import *
+from OpenGL.GLUT import *  # Import all GLUT functions
+from OpenGL.GLUT.fonts import GLUT_BITMAP_HELVETICA_18  # Explicitly import the font
+import sys
+import math
+import random
+import time
 
-game_state = {
-    'tanks': [
-        {'position': (0, 0, 0), 'rotation': 0, 'health': 100},
-        {'position': (30, 0, 30), 'rotation': 180, 'health': 100}
-    ],
-    'enemies': [],
-    'projectiles': [],
-    'scores': {'player': 0, 'wave': 1},
-    'camera_mode': True,
-    'explosions': [],  
-    'game_over': False,
-    'last_wave_time': time.time(),
-    'winner': None,
-    'powerup': None,
-    'powerup_spawn_time': time.time(),
-    'powerup_duration': 15,  
-    'powerup_active': False,
-    'powerup_speed_boost': False,
-    'powerup_speed_end_time': 0,
-    'enemy_mode': 'chasing',
-    'avoiding_frames': 0,
-    'avoiding_direction': 0,
-    'speed_boost': False
-}
+# Game state
+tank_pos = [0.0, 0.0, 0.0]
+tank_angle = 0.0
+player_health = 200
 
-GRID_LENGTH = 50
-TANK_RADIUS = 2
-BULLET_SPEED = 0.8
-TANK_SPEED = 0.6
+player_projectiles = []
+explosions = []
 
-camera_distance = 15
-camera_height = 10
-MIN_CAMERA_DISTANCE = 5
-MAX_CAMERA_DISTANCE = 30
-MIN_CAMERA_HEIGHT = 5
-MAX_CAMERA_HEIGHT = 30
-MIN_ENEMY_DISTANCE = 15
+game_over = False
+victory = False
+paused = False
+menu_state = "main"  # main, difficulty, mode
+difficulty = "medium"  # easy, medium, hard
+game_mode = "normal"  # normal, capture_flag
 
-obstacles = [
-    {'type': 'cube', 'x': 10, 'z': 10, 'size':4},
-    {'type': 'cube', 'x': -15, 'z': -15, 'size': 5},
-    {'type': 'cube', 'x': 20, 'z': -10, 'size': 3},
-    {'type': 'cube', 'x': -20, 'z': 15, 'size': 6},
-    {'type': 'cube', 'x': 0, 'z': -25, 'size': 4}
+arena_size = 50.0  # Increased arena size
+camera_mode = "third_person"  # Added camera mode variable
+
+# Capture the flag mode variables
+flag_pos = [0.0, 0.0, 0.0]
+flag_captured = False
+player_score = 0
+enemy_score = 0
+
+# --- Enemy and Obstacle Structures ---
+class EnemyTank:
+    def __init__(self, pos, angle):
+        self.pos = pos[:]
+        self.angle = angle
+        self.health = 100
+        self.projectiles = []
+        self.alive = True
+
+# List of enemy tanks
+enemy_tanks = [
+    EnemyTank([20.0, 0.0, 20.0], 180.0),
+    EnemyTank([-20.0, 0.0, 20.0], 180.0),
+    EnemyTank([20.0, 0.0, -20.0], 180.0),
 ]
 
-def draw_minimap():
-    glMatrixMode(GL_PROJECTION)
+# --- Obstacles ---
+class Obstacle:
+    def __init__(self, pos, kind, **kwargs):
+        self.pos = pos[:]
+        self.kind = kind  # 'blade', 'lava', 'cube', 'barrier'
+        self.angle = kwargs.get('angle', 0)
+        self.speed = kwargs.get('speed', 0.05)
+        self.size = kwargs.get('size', 2.0)
+        self.dir = kwargs.get('dir', 1)
+        self.axis = kwargs.get('axis', 'y')
+        self.t = 0
+
+obstacles = [
+    Obstacle([10, 0, 0], 'blade', speed=2, size=2),
+    Obstacle([-10, 0, 10], 'lava', size=3),
+    Obstacle([0, 0, -10], 'cube', speed=0.1, dir=1),
+    Obstacle([0, 0, 15], 'barrier', speed=1, axis='x'),
+]
+
+class Explosion:
+    def __init__(self, x, z):
+        self.x = x
+        self.z = z
+        self.start_time = time.time()
+
+def draw_health_bar(x, z, health, color):
     glPushMatrix()
-    glLoadIdentity()
-    glOrtho(0, 100, 0, 100, -1, 1)
-    glMatrixMode(GL_MODELVIEW)
-    glPushMatrix()
-    glLoadIdentity()
-
-    glDisable(GL_LIGHTING)
-
-    def draw_dot(x, z, color):
-        glColor3f(*color)
-        glBegin(GL_QUADS)
-        glVertex2f(x - 1, z - 1)
-        glVertex2f(x + 1, z - 1)
-        glVertex2f(x + 1, z + 1)
-        glVertex2f(x - 1, z + 1)
-        glEnd()
-
-    for obs in obstacles:
-        draw_dot(obs['x'] / GRID_LENGTH * 50 + 50, obs['z'] / GRID_LENGTH * 50 + 50, (0.5, 0.5, 0.5))
-
-    for tank in game_state['tanks']:
-        draw_dot(tank['position'][0] / GRID_LENGTH * 50 + 50, tank['position'][2] / GRID_LENGTH * 50 + 50, (0.0, 0.0, 1.0))
-
-    for enemy in game_state['enemies']:
-        draw_dot(enemy['position'][0] / GRID_LENGTH * 50 + 50, enemy['position'][2] / GRID_LENGTH * 50 + 50, (1.0, 0.0, 0.0))
-
-    glEnable(GL_LIGHTING)
-    glPopMatrix()
-    glMatrixMode(GL_PROJECTION)
-    glPopMatrix()
-    glMatrixMode(GL_MODELVIEW)
-    
-def spawn_wave():
-    current_wave = game_state['scores']['wave']
-    game_state['scores']['wave'] += 1
-    player_pos = game_state['tanks'][0]['position']
-    new_enemies = []
-    for _ in range(current_wave):
-        valid = False
-        while not valid:
-            x = random.uniform(-GRID_LENGTH + 5, GRID_LENGTH - 5)
-            z = random.uniform(-GRID_LENGTH + 5, GRID_LENGTH - 5)
-            dist = math.sqrt((x - player_pos[0])**2 + (z - player_pos[2])**2)
-            if dist >= MIN_ENEMY_DISTANCE:
-                valid = True
-                new_enemies.append({'position': (x, 0, z), 'rotation': 180, 'health': 100})
-    game_state['enemies'] = new_enemies
-    
-def keyboardListener(key, x, y):
-  
-    if game_state['game_over']:
-        if key == b'r':
-            reset_game()
-        return
-        
-    if key == b'w':
-        pos = list(game_state['tanks'][0]['position'])
-        rot = game_state['tanks'][0]['rotation']
-        speed_multiplier = 2.0 if game_state['powerup_speed_boost'] else 1.0
-        pos[0] += TANK_SPEED * speed_multiplier * math.sin(math.radians(rot))
-        pos[2] += TANK_SPEED * speed_multiplier * math.cos(math.radians(rot))
-        if not check_boundary_collision(pos) and not check_obstacle_collision(pos):
-            game_state['tanks'][0]['position'] = tuple(pos)
-    elif key == b's':
-        pos = list(game_state['tanks'][0]['position'])
-        rot = game_state['tanks'][0]['rotation']
-        speed_multiplier = 2.0 if game_state['powerup_speed_boost'] else 1.0
-        pos[0] -= TANK_SPEED * speed_multiplier * math.sin(math.radians(rot))
-        pos[2] -= TANK_SPEED * speed_multiplier * math.cos(math.radians(rot))
-        if not check_boundary_collision(pos) and not check_obstacle_collision(pos):
-            game_state['tanks'][0]['position'] = tuple(pos)
-    elif key == b'a':
-        game_state['tanks'][0]['rotation'] = (game_state['tanks'][0]['rotation'] + 5) % 360
-    elif key == b'd':
-        game_state['tanks'][0]['rotation'] = (game_state['tanks'][0]['rotation'] - 5) % 360
-    elif key == b'c': 
-        game_state['scores'][0] += 1
-    elif key == b'v':
-        game_state['scores'][1] += 1
-    elif key == b'r':
-        reset_game()
-    
-    glutPostRedisplay()
-
-def specialKeyListener(key, x, y):
-    global camera_distance, camera_height
-
-    if key == GLUT_KEY_F1:
-        game_state['camera_mode'] = not game_state['camera_mode']
-    elif key == GLUT_KEY_UP:
-        camera_distance = max(MIN_CAMERA_DISTANCE, camera_distance - 1)
-        camera_height = max(MIN_CAMERA_HEIGHT, camera_height - 1)
-    elif key == GLUT_KEY_DOWN:
-        camera_distance = min(MAX_CAMERA_DISTANCE, camera_distance + 1)
-        camera_height = min(MAX_CAMERA_HEIGHT, camera_height + 1)
-    
-    glutPostRedisplay()
-
-def mouseListener(button, state, x, y):
-    if game_state['game_over']:
-        return
-        
-    if button == GLUT_LEFT_BUTTON and state == GLUT_DOWN:
-        tank_pos = game_state['tanks'][0]['position']
-        rotation = game_state['tanks'][0]['rotation']
-    
-        rad = math.radians(rotation)
-        direction = (math.sin(rad), 0, math.cos(rad))
-        
-        projectile = {
-            'position': tank_pos,
-            'direction': direction,
-            'owner': 0 
-        }
-        
-        game_state['projectiles'].append(projectile)
-    
-    glutPostRedisplay()
-
-# def mouseMotionListener(x, y):
-#     pass
-
-# Module 2: Projectile System & Collision
-def update_projectiles():
-    if game_state['game_over']:
-        return
-        
-    projectiles_to_remove = []
-    
-    for i, proj in enumerate(game_state['projectiles']):
-        pos = list(proj['position'])
-        dir_vector = proj['direction']
-        
-        pos[0] += dir_vector[0] * BULLET_SPEED
-        pos[1] += dir_vector[1] * BULLET_SPEED
-        pos[2] += dir_vector[2] * BULLET_SPEED
-        
-        proj['position'] = tuple(pos)
-        
-        if (abs(pos[0]) > GRID_LENGTH or abs(pos[2]) > GRID_LENGTH):
-            projectiles_to_remove.append(i)
-            continue
-        
-        if check_obstacle_collision(pos):
-            projectiles_to_remove.append(i)
-            create_explosion(pos)
-            continue
-        
-        for tank_idx, tank in enumerate(game_state['tanks']):
-            if proj['owner'] != tank_idx: 
-                if check_projectile_tank_collision(pos, tank['position']):
-                    projectiles_to_remove.append(i)
-                    create_explosion(pos)
-    
-                    game_state['tanks'][tank_idx]['health'] -= 20
-                    
-                    if game_state['tanks'][tank_idx]['health'] <= 0:
-                        game_state['scores'][proj['owner']] += 1
-                        respawn_tank(tank_idx)
-                    
-                    break
-    
-    for i in sorted(projectiles_to_remove, reverse=True):
-        if i < len(game_state['projectiles']):
-            game_state['projectiles'].pop(i)
-
-def check_projectile_tank_collision(proj_pos, tank_pos):
-    distance = math.sqrt((proj_pos[0] - tank_pos[0])**2 + (proj_pos[2] - tank_pos[2])**2)
-    return distance < TANK_RADIUS
-
-def check_tank_collision(tank1_pos, tank2_pos):
-    distance = math.sqrt((tank1_pos[0] - tank2_pos[0])**2 + (tank1_pos[2] - tank2_pos[2])**2)
-    return distance < TANK_RADIUS * 2
-
-def check_boundary_collision(pos):
-    return abs(pos[0]) > GRID_LENGTH or abs(pos[2]) > GRID_LENGTH
-
-def check_obstacle_collision(pos):
-    for obs in obstacles:
-        distance = math.sqrt((pos[0] - obs['x'])**2 + (pos[2] - obs['z'])**2)
-        if distance < (obs['size'] / 2 + TANK_RADIUS):
-            return True
-    return False
-
-def create_explosion(position):
-    explosion = {
-        'position': position,
-        'scale': 0.1,
-        'lifetime': 30 
-    }
-    game_state['explosions'].append(explosion)
-
-def update_explosions():
-    explosions_to_remove = []
-    
-    for i, explosion in enumerate(game_state['explosions']):
-        explosion['lifetime'] -= 1
-        explosion['scale'] = 2.0 * (1 - explosion['lifetime'] / 30)
-        
-        if explosion['lifetime'] <= 0:
-            explosions_to_remove.append(i)
-    
-    for i in sorted(explosions_to_remove, reverse=True):
-        if i < len(game_state['explosions']):
-            game_state['explosions'].pop(i)
-
-def respawn_tank(tank_idx):
-    game_state['tanks'][tank_idx]['health'] = 100
-    
-    valid_position = False
-    while not valid_position:
-        x = (2 * (tank_idx % 2) - 1) * (GRID_LENGTH - 10) * (0.3 + 0.7 * (random.random()))
-        z = (2 * (tank_idx // 2) - 1) * (GRID_LENGTH - 10) * (0.3 + 0.7 * (random.random()))
-        pos = (x, 0, z)
-        
-        valid_position = True
-        if check_obstacle_collision(pos):
-            valid_position = False
-            continue
-        
-        for other_idx, other_tank in enumerate(game_state['tanks']):
-            if other_idx != tank_idx and check_tank_collision(pos, other_tank['position']):
-                valid_position = False
-                break
-    
-    game_state['tanks'][tank_idx]['position'] = pos
-    game_state['tanks'][tank_idx]['rotation'] = 0 if tank_idx == 0 else 180
-
-def reset_game():
-    game_state['scores'] = [0, 0]
-    
-    for i in range(len(game_state['tanks'])):
-        respawn_tank(i)
-    
-    game_state['projectiles'] = []
-    game_state['explosions'] = []
-    
-    game_state['game_over'] = False
-    game_state['winner'] = None
-    game_state['powerup'] = None
-    game_state['powerup_spawn_time'] = time.time()
-    game_state['powerup_speed_boost'] = False
-    game_state['enemy_mode'] = 'chasing'
-    game_state['avoiding_frames'] = 0
-    game_state['avoiding_direction'] = 0
-
-def check_win_condition():
-    if game_state.get('game_over', False):
-        return
-
-    if game_state['scores'][0] >= 5:
-        game_state['game_over'] = True
-        game_state['winner'] = 0
-    elif game_state['scores'][1] >= 5:
-        game_state['game_over'] = True
-        game_state['winner'] = 1
-
-def update_enemy_ai():
-    if game_state['game_over']:
-        return
-        
-    # Simple AI for enemy tank
-    enemy = game_state['tanks'][1]  
-    player = game_state['tanks'][0]  
-    
-    if 'enemy_mode' not in game_state:
-        game_state['enemy_mode'] = 'chasing'
-    if 'avoiding_frames' not in game_state:
-        game_state['avoiding_frames'] = 0
-    if 'avoiding_direction' not in game_state:
-        game_state['avoiding_direction'] = 0  # 1 for left, -1 for right
-    
-    dx = player['position'][0] - enemy['position'][0]
-    dz = player['position'][2] - enemy['position'][2]
-    
-    target_angle = math.degrees(math.atan2(dx, dz)) % 360
-    
-    current_angle = enemy['rotation']
-    angle_diff = (target_angle - current_angle + 180) % 360 - 180
-    
-    distance = math.sqrt(dx**2 + dz**2)
-    
-    if game_state['enemy_mode'] == 'chasing':
-        if abs(angle_diff) > 5:
-            if angle_diff > 0:
-                enemy['rotation'] = (current_angle + 2) % 360
-            else:
-                enemy['rotation'] = (current_angle - 2) % 360
-        
-        if distance > 20 and abs(angle_diff) < 10:
-            pos = list(enemy['position'])
-            rot = enemy['rotation']
-            pos[0] += TANK_SPEED * 0.5 * math.sin(math.radians(rot))
-            pos[2] += TANK_SPEED * 0.5 * math.cos(math.radians(rot))
-            
-            if check_boundary_collision(pos) or check_obstacle_collision(pos):
-                game_state['enemy_mode'] = 'avoiding'
-                game_state['avoiding_frames'] = 20
-                game_state['avoiding_direction'] = random.choice([1, -1])  # Randomly choose left or right
-            else:
-                enemy['position'] = tuple(pos)
-        
-        if abs(angle_diff) < 5 and random.random() < 0.02:
-            direction = (math.sin(math.radians(enemy['rotation'])), 
-                         0, 
-                         math.cos(math.radians(enemy['rotation'])))
-            
-            projectile = {
-                'position': enemy['position'],
-                'direction': direction,
-                'owner': 1  # Enemy's projectile
-            }
-            
-            game_state['projectiles'].append(projectile)
-    
-    elif game_state['enemy_mode'] == 'avoiding':
-        if game_state['avoiding_frames'] > 0:
-            enemy['rotation'] = (enemy['rotation'] + 2 * game_state['avoiding_direction']) % 360
-            game_state['avoiding_frames'] -= 1
-            
-            if game_state['avoiding_frames'] % 5 == 0:
-                pos = list(enemy['position'])
-                rot = enemy['rotation']
-                pos[0] += TANK_SPEED * 0.5 * math.sin(math.radians(rot))
-                pos[2] += TANK_SPEED * 0.5 * math.cos(math.radians(rot))
-                
-                if not check_boundary_collision(pos) and not check_obstacle_collision(pos):
-                    enemy['position'] = tuple(pos)
-        else:
-            game_state['enemy_mode'] = 'chasing'
-
-# Powerup system
-def spawn_powerup():
-    if game_state['powerup'] is not None:
-        return
-    
-    while True:
-        x = random.uniform(-GRID_LENGTH + 5, GRID_LENGTH - 5)
-        z = random.uniform(-GRID_LENGTH + 5, GRID_LENGTH - 5)
-        pos = (x, 0, z)
-        
-        if check_obstacle_collision(pos):
-            continue
-        collision = False
-        for tank in game_state['tanks']:
-            dist = math.sqrt((pos[0] - tank['position'][0])**2 + (pos[2] - tank['position'][2])**2)
-            if dist < TANK_RADIUS * 2:
-                collision = True
-                break
-        if collision:
-            continue
-        
-        game_state['powerup'] = {'position': pos, 'spawn_time': time.time()}
-        break
-
-def check_powerup_collection():
-    if game_state['powerup'] is None:
-        return
-    
-    player_pos = game_state['tanks'][0]['position']
-    powerup_pos = game_state['powerup']['position']
-    dist = math.sqrt((player_pos[0] - powerup_pos[0])**2 + (player_pos[2] - powerup_pos[2])**2)
-    if dist < TANK_RADIUS * 2:
-        # Collect powerup
-        #health refill or speed boost
-        if random.random() < 0.5:
-            game_state['tanks'][0]['health'] = 100
-        else:
-            game_state['powerup_speed_boost'] = True
-            game_state['powerup_speed_end_time'] = time.time() + 10
-        
-        game_state['powerup'] = None
-        game_state['powerup_spawn_time'] = time.time()
-
-def update_powerup():
-    if game_state['game_over']:
-        return
-        
-    if game_state['powerup'] is None:
-        if time.time() - game_state['powerup_spawn_time'] > random.uniform(15, 20):
-            spawn_powerup()
-    else:
-        # Remove powerup after 15 seconds if not collected
-        if time.time() - game_state['powerup']['spawn_time'] > 15:
-            game_state['powerup'] = None
-            game_state['powerup_spawn_time'] = time.time()
-
-    # Remove speed boost if expired
-    if game_state['powerup_speed_boost'] and time.time() > game_state['powerup_speed_end_time']:
-        game_state['powerup_speed_boost'] = False
-
-# Drawing functions
-def draw_tank(tank):
-    glPushMatrix()
-    
-    glTranslatef(tank['position'][0], 0, tank['position'][2])
-    
-    glRotatef(tank['rotation'], 0, 1, 0)
-    
-    if tank == game_state['tanks'][0]:
-        glColor3f(0.2, 0.2, 0.8)  # Blue for player
-    else:
-        glColor3f(0.8, 0.2, 0.2)  # Red for enemy
-    
-    glutSolidCube(TANK_RADIUS * 2)
-    
+    glTranslatef(x, 1.8, z)
+    glScalef(1, 0.2, 0.2)
     glColor3f(0.3, 0.3, 0.3)
-    glTranslatef(0, TANK_RADIUS, 0)
-    glutSolidCube(TANK_RADIUS)
-    
-    glTranslatef(0, 0, TANK_RADIUS)
-    glRotatef(90, 1, 0, 0)
-    quadric = gluNewQuadric()
-    gluCylinder(quadric, TANK_RADIUS / 3, TANK_RADIUS / 3, TANK_RADIUS * 2, 10, 10)
-    
-    glPopMatrix()
-
-    glPushMatrix()
-    
-    glTranslatef(tank['position'][0], 0, tank['position'][2])
-    
-    glRotatef(-tank['rotation'], 0, 1, 0)
-    
-    glTranslatef(0, TANK_RADIUS * 2.5, 0)
-    
-    #health bar color (green to red)
-    health_ratio = max(0, min(1, tank['health'] / 100))
-    red = 1.0 - health_ratio
-    green = health_ratio
-    glColor3f(red, green, 0.0)
-    
-    #horizontal rectangle as health bar
-    bar_width = 4.0 * health_ratio
-    bar_height = 0.5
-    
-    glBegin(GL_QUADS)
-    glVertex3f(-2.0, 0, 0)
-    glVertex3f(-2.0 + bar_width, 0, 0)
-    glVertex3f(-2.0 + bar_width, bar_height, 0)
-    glVertex3f(-2.0, bar_height, 0)
-    glEnd()
-    
-    glPopMatrix()
-
-def draw_projectile(projectile):
-    glPushMatrix()
-    
-    glTranslatef(projectile['position'][0], 0.5, projectile['position'][2])
-    
-    if projectile['owner'] == 0:
-        glColor3f(0.0, 0.0, 1.0)  # Blue for player
-    else:
-        glColor3f(1.0, 0.0, 0.0)  # Red for enemy
-    
-    quadric = gluNewQuadric()
-    gluSphere(quadric, 0.3, 10, 10)
-    
-    glPopMatrix()
-
-def draw_explosion(explosion):
-    glPushMatrix()
-    
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    
-    glTranslatef(explosion['position'][0], 0, explosion['position'][2])
-    
-    alpha = max(0.0, explosion['lifetime'] / 30.0)
-    
-    glColor4f(1.0, 0.5, 0.0, alpha)
-    
-    scale = explosion['scale'] * 1.5
-    glutSolidSphere(scale, 10, 10)
-    
-    glDisable(GL_BLEND)
-    
-    glPopMatrix()
-
-def draw_obstacle(obstacle):
-    glPushMatrix()
-    
-    glTranslatef(obstacle['x'], obstacle['size'] / 2, obstacle['z'])
-    
-    glColor3f(0.5, 0.5, 0.5)
-    glutSolidCube(obstacle['size'])
-    
-    glPopMatrix()
-
-def draw_powerup():
-    if game_state['powerup'] is None:
-        return
-    
-    glPushMatrix()
-    
-    #powerup rotate and float
-    glTranslatef(game_state['powerup']['position'][0], 
-                 TANK_RADIUS / 2 + 0.5 * math.sin(time.time() * 2), 
-                 game_state['powerup']['position'][2])
-    glRotatef(time.time() * 50 % 360, 0, 1, 0)
-    
-    glColor3f(1.0, 1.0, 0.0)
     glutSolidCube(1.0)
-    
+    glColor3f(*color)
+    glScalef(health / 100.0, 1, 1)
+    glutSolidCube(1.0)
+    glPopMatrix()
+
+def draw_explosions():
+    global explosions
+    current_time = time.time()
+    for e in explosions[:]:
+        elapsed = current_time - e.start_time
+        if elapsed > 0.5:
+            explosions.remove(e)
+            continue
+        glPushMatrix()
+        glTranslatef(e.x, 0.3, e.z)
+        glColor3f(1.0, 0.5, 0.0)
+        glutSolidSphere(0.3 + elapsed * 2, 10, 10)
+        glPopMatrix()
+
+def draw_tank(pos, angle, color):
+    glPushMatrix()
+    glTranslatef(pos[0], pos[1], pos[2])
+    glRotatef(angle, 0, 1, 0)
+
+    # Tank body (main chassis)
+    glPushMatrix()
+    glColor3f(*color)
+    glScalef(1.2, 0.6, 2.0)  # Make the body longer and flatter
+    glutSolidCube(1.0)
+    glPopMatrix()
+
+    # Tank tracks
+    glPushMatrix()
+    glColor3f(0.2, 0.2, 0.2)  # Dark gray for tracks
+    # Left track
+    glPushMatrix()
+    glTranslatef(-0.7, -0.3, 0)
+    glScalef(0.2, 0.3, 2.0)
+    glutSolidCube(1.0)
+    glPopMatrix()
+    # Right track
+    glPushMatrix()
+    glTranslatef(0.7, -0.3, 0)
+    glScalef(0.2, 0.3, 2.0)
+    glutSolidCube(1.0)
+    glPopMatrix()
+    glPopMatrix()
+
+    # Turret base
+    glPushMatrix()
+    glTranslatef(0, 0.4, 0)
+    glColor3f(0.8, 0.8, 0.8)
+    glScalef(0.8, 0.4, 0.8)
+    glutSolidCube(1.0)
+    glPopMatrix()
+
+    # Turret dome
+    glPushMatrix()
+    glTranslatef(0, 0.8, 0)
+    glColor3f(0.8, 0.8, 0.8)
+    glutSolidSphere(0.4, 16, 16)
+    glPopMatrix()
+
+    # Main gun barrel
+    glPushMatrix()
+    glTranslatef(0, 0.8, 0.5)
+    glRotatef(-90, 1, 0, 0)
+    glColor3f(0.3, 0.3, 0.3)
+    gluCylinder(gluNewQuadric(), 0.15, 0.1, 1.2, 16, 16)
+    glPopMatrix()
+
+    # Machine gun on top
+    glPushMatrix()
+    glTranslatef(0.3, 1.0, 0)
+    glRotatef(-90, 1, 0, 0)
+    glColor3f(0.3, 0.3, 0.3)
+    gluCylinder(gluNewQuadric(), 0.05, 0.05, 0.4, 8, 8)
+    glPopMatrix()
+
+    # Headlights
+    glPushMatrix()
+    glColor3f(1.0, 1.0, 0.8)
+    # Left headlight
+    glPushMatrix()
+    glTranslatef(-0.4, 0.2, -1.0)
+    glutSolidSphere(0.1, 8, 8)
+    glPopMatrix()
+    # Right headlight
+    glPushMatrix()
+    glTranslatef(0.4, 0.2, -1.0)
+    glutSolidSphere(0.1, 8, 8)
+    glPopMatrix()
+    glPopMatrix()
+
     glPopMatrix()
 
 def draw_arena():
-    glPushMatrix()
-    glColor3f(0.3, 0.7, 0.3)
+    glColor3f(0.2, 0.2, 0.2)
     glBegin(GL_QUADS)
-    glVertex3f(-GRID_LENGTH, 0, -GRID_LENGTH)
-    glVertex3f(GRID_LENGTH, 0, -GRID_LENGTH)
-    glVertex3f(GRID_LENGTH, 0, GRID_LENGTH)
-    glVertex3f(-GRID_LENGTH, 0, GRID_LENGTH)
+    glVertex3f(-arena_size, -0.5, -arena_size)
+    glVertex3f(-arena_size, -0.5, arena_size)
+    glVertex3f(arena_size, -0.5, arena_size)
+    glVertex3f(arena_size, -0.5, -arena_size)
     glEnd()
-    
-    glColor3f(0.5, 0.5, 0.5)
-    glBegin(GL_LINES)
-    for i in range(-GRID_LENGTH, GRID_LENGTH + 1, 10):
-        glVertex3f(i, 0.01, -GRID_LENGTH)
-        glVertex3f(i, 0.01, GRID_LENGTH)
-        glVertex3f(-GRID_LENGTH, 0.01, i)
-        glVertex3f(GRID_LENGTH, 0.01, i)
-    glEnd()
-    
-    #boundary walls
-    glColor3f(0.7, 0.7, 0.7)
-    
-    glPushMatrix()
-    glTranslatef(0, 5, -GRID_LENGTH)
-    glScalef(2 * GRID_LENGTH, 10, 1)
-    glutSolidCube(1)
-    glPopMatrix()
-    
-    glPushMatrix()
-    glTranslatef(0, 5, GRID_LENGTH)
-    glScalef(2 * GRID_LENGTH, 10, 1)
-    glutSolidCube(1)
-    glPopMatrix()
-    
-    glPushMatrix()
-    glTranslatef(GRID_LENGTH, 5, 0)
-    glScalef(1, 10, 2 * GRID_LENGTH)
-    glutSolidCube(1)
-    glPopMatrix()
-    
-    glPushMatrix()
-    glTranslatef(-GRID_LENGTH, 5, 0)
-    glScalef(1, 10, 2 * GRID_LENGTH)
-    glutSolidCube(1)
-    glPopMatrix()
-    
-    glPopMatrix()
 
-def draw_text(text, x, y):
+def distance(a, b):
+    return math.sqrt((a[0]-b[0])**2 + (a[2]-b[2])**2)
+
+def draw_menu():
+    glPushAttrib(GL_ALL_ATTRIB_BITS)
+    glDisable(GL_DEPTH_TEST)
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
     glLoadIdentity()
-    glOrtho(0, 800, 0, 600, -1, 1)
-    
+    gluOrtho2D(-5, 5, -3, 3)
     glMatrixMode(GL_MODELVIEW)
     glPushMatrix()
     glLoadIdentity()
-    
+
+    # Draw semi-transparent background
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glColor4f(0.1, 0.1, 0.1, 0.8)
+    glBegin(GL_QUADS)
+    glVertex2f(-5, -3)
+    glVertex2f(5, -3)
+    glVertex2f(5, 3)
+    glVertex2f(-5, 3)
+    glEnd()
+    glDisable(GL_BLEND)
+
+    # Draw menu title
     glColor3f(1, 1, 1)
-    glRasterPos2i(x, y)
-    
-    for char in text:
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
-    
+    glRasterPos2f(-1.5, 2)
+    for c in b"PAUSE MENU":
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c)
+
+    # Draw menu options based on current state
+    if menu_state == "main":
+        options = ["1. Resume Game", "2. Change Difficulty", "3. Change Mode", "4. Restart Game"]
+        for i, option in enumerate(options):
+            glRasterPos2f(-2, 1 - i * 0.5)
+            for c in option.encode():
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c)
+    elif menu_state == "difficulty":
+        options = [f"1. Easy (Current: {'X' if difficulty == 'easy' else ' '})",
+                  f"2. Medium (Current: {'X' if difficulty == 'medium' else ' '})",
+                  f"3. Hard (Current: {'X' if difficulty == 'hard' else ' '})",
+                  "4. Back"]
+        for i, option in enumerate(options):
+            glRasterPos2f(-2, 1 - i * 0.5)
+            for c in option.encode():
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c)
+    elif menu_state == "mode":
+        options = [f"1. Normal Mode (Current: {'X' if game_mode == 'normal' else ' '})",
+                  f"2. Capture the Flag (Current: {'X' if game_mode == 'capture_flag' else ' '})",
+                  "3. Back"]
+        for i, option in enumerate(options):
+            glRasterPos2f(-2, 1 - i * 0.5)
+            for c in option.encode():
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c)
+
     glPopMatrix()
-    
     glMatrixMode(GL_PROJECTION)
     glPopMatrix()
-    
     glMatrixMode(GL_MODELVIEW)
+    glPopAttrib()
 
-def draw_hud():
-    #scores
-    draw_text(f"Score: {game_state['scores']['player']}  Wave: {game_state['scores']['wave']-1}", 10, 580)
-    draw_text(f"Health: {game_state['tanks'][0]['health']}", 10, 560)
-    #health bars
-    draw_text(f"Player Health: {game_state['tanks'][0]['health']}", 10, 560)
-    draw_text(f"Enemy Health: {game_state['tanks'][1]['health']}", 10, 540)
+def reset_game():
+    global tank_pos, tank_angle, player_health
+    global player_projectiles, explosions, game_over, victory
+    global flag_captured, player_score, enemy_score
     
-    if game_state['powerup_speed_boost']:
-        time_left = int(game_state['powerup_speed_end_time'] - time.time())
-        draw_text(f"Speed Boost: {time_left}s", 10, 520)
-    
-    draw_text(f"Enemy Mode: {game_state['enemy_mode']}", 10, 500)
-    
-    if game_state.get('game_over', False):
-        winner = game_state.get('winner', None)
-        if winner is not None:
-            text = f"PLAYER {winner + 1} WINS! Press R to restart"
-            # Draw large centered text
-            draw_text(text, 250, 300)
-    draw_minimap()
+    tank_pos = [0.0, 0.0, 0.0]
+    tank_angle = 0.0
+    player_health = 200
+    player_projectiles = []
+    explosions = []
+    game_over = False
+    victory = False
+    flag_captured = False
+    player_score = 0
+    enemy_score = 0
 
-def setupCamera():
-    glMatrixMode(GL_PROJECTION)
-    glLoadIdentity()
-    gluPerspective(45, 800/600, 0.1, 1000)
-    
-    glMatrixMode(GL_MODELVIEW)
-    glLoadIdentity()
-    
-    if game_state['camera_mode']:
-        #Third-person camera
-        tank_pos = game_state['tanks'][0]['position']
-        tank_rot = game_state['tanks'][0]['rotation']
-        
-        global camera_distance, camera_height
-        
-        rot_rad = math.radians(tank_rot)
-        
-        camera_x = tank_pos[0] - camera_distance * math.sin(rot_rad)
-        camera_z = tank_pos[2] - camera_distance * math.cos(rot_rad)
-        
-        gluLookAt(
-            camera_x, camera_height, camera_z,  
-            tank_pos[0], 0, tank_pos[2],        
-            0, 1, 0                             
-        )
-    else:
-        # Top-down view
-        gluLookAt(
-            0, 80, 0,    
-            0, 0, 0,      
-            0, 0, -1    
-        )
+# --- Smarter Enemy AI ---
+def update_enemy_ai():
+    for enemy in enemy_tanks:
+        if not enemy.alive:
+            continue
+        dx = tank_pos[0] - enemy.pos[0]
+        dz = tank_pos[2] - enemy.pos[2]
+        dist = math.sqrt(dx*dx + dz*dz)
+        desired_angle = math.degrees(math.atan2(dx, dz))
+        angle_diff = (desired_angle - enemy.angle + 360) % 360
+        if angle_diff > 180:
+            angle_diff -= 360
+        # Turn toward player
+        enemy.angle += max(min(angle_diff, 1.5), -1.5)
+        enemy.angle %= 360
+        # Move toward player (slowly)
+        if dist > 5:
+            rad = math.radians(enemy.angle)
+            move_x = math.sin(rad) * 0.15
+            move_z = math.cos(rad) * 0.15
+            # Avoid player projectiles
+            dodge = 0
+            for p in player_projectiles:
+                if abs(p[2] - enemy.pos[2]) < 2 and abs(p[0] - enemy.pos[0]) < 5:
+                    dodge = -1 if (p[0] > enemy.pos[0]) else 1
+            enemy.pos[0] += move_x + dodge * 0.2
+            enemy.pos[2] += move_z
+            check_boundaries(enemy.pos)
+        # Fire at player
+        if abs(angle_diff) < 10 and random.random() < 0.02:
+            ex, ez = math.sin(math.radians(enemy.angle)), math.cos(math.radians(enemy.angle))
+            enemy.projectiles.append([enemy.pos[0], 0.2, enemy.pos[2], ex, ez])
 
-def draw_shapes():
-    draw_arena()
-    
+# --- Draw all enemy tanks ---
+def draw_all_enemies():
+    for enemy in enemy_tanks:
+        if enemy.alive:
+            draw_tank(enemy.pos, enemy.angle, (1, 0, 0))
+            draw_health_bar(enemy.pos[0], enemy.pos[2], enemy.health, (1, 0, 0))
+
+# --- Move all enemy projectiles ---
+def move_projectiles():
+    for p in player_projectiles[:]:
+        p[0] += p[3] * 0.5
+        p[2] += p[4] * 0.5
+        if abs(p[0]) > arena_size or abs(p[2]) > arena_size:
+            player_projectiles.remove(p)
+    for enemy in enemy_tanks:
+        for p in enemy.projectiles[:]:
+            p[0] += p[3] * 0.5
+            p[2] += p[4] * 0.5
+            if abs(p[0]) > arena_size or abs(p[2]) > arena_size:
+                enemy.projectiles.remove(p)
+
+# --- Generate More Obstacles (with buildings and better lava) ---
+def generate_obstacles():
+    global obstacles
+    obstacles = []
+    spacing = 8
+    for x in range(-int(arena_size)+4, int(arena_size)-3, spacing):
+        for z in range(-int(arena_size)+4, int(arena_size)-3, spacing):
+            # Leave a clear path at the center
+            if abs(x) < 6 and abs(z) < 6:
+                continue
+            # Alternate obstacle types
+            if (x+z) % 24 == 0:
+                obstacles.append(Obstacle([x, 0, z], 'lava', size=5))
+            elif (x-z) % 24 == 0:
+                obstacles.append(Obstacle([x, 0, z], 'blade', speed=2, size=2))
+            elif (x*z) % 32 == 0:
+                obstacles.append(Obstacle([x, 0, z], 'cube', speed=0.1, dir=1, size=2))
+            elif (x*z) % 40 == 0:
+                obstacles.append(Obstacle([x, 0, z], 'building', size=3))
+            else:
+                obstacles.append(Obstacle([x, 0, z], 'barrier', speed=1, axis='x', size=2))
+
+generate_obstacles()
+
+# --- Update draw_obstacles for buildings and better lava ---
+def draw_obstacles():
     for obs in obstacles:
-        draw_obstacle(obs)
-    
-    draw_powerup()
-    
-    for tank in game_state['tanks']:
-        draw_tank(tank)
-    
-    for proj in game_state['projectiles']:
-        draw_projectile(proj)
-    
-    for explosion in game_state['explosions']:
-        draw_explosion(explosion)
-    
-    draw_hud()
+        glPushMatrix()
+        glTranslatef(obs.pos[0], 0, obs.pos[2])
+        if obs.kind == 'blade':
+            obs.angle += obs.speed
+            glRotatef(obs.angle, 0, 1, 0)
+            glColor3f(1, 0, 0)
+            glScalef(obs.size, 0.2, 0.5)
+            glutSolidCube(1.0)
+        elif obs.kind == 'lava':
+            glColor3f(1, 0.3, 0)
+            glTranslatef(0, -0.6, 0)
+            glScalef(obs.size, 0.1, obs.size)
+            glutSolidCube(1.0)
+        elif obs.kind == 'cube':
+            obs.t += obs.speed * obs.dir
+            if abs(obs.t) > 5:
+                obs.dir *= -1
+            glTranslatef(0, 0, obs.t)
+            glColor3f(0, 0, 1)
+            glutSolidCube(obs.size)
+        elif obs.kind == 'barrier':
+            obs.angle += obs.speed
+            if obs.axis == 'x':
+                glRotatef(obs.angle, 1, 0, 0)
+            else:
+                glRotatef(obs.angle, 0, 0, 1)
+            glColor3f(0, 1, 1)
+            glScalef(4, 0.2, 0.5)
+            glutSolidCube(1.0)
+        elif obs.kind == 'building':
+            glColor3f(0.5, 0.5, 0.5)
+            glScalef(obs.size, 4.0, obs.size)
+            glutSolidCube(1.0)
+        glPopMatrix()
 
+# --- Update can_move_to to block buildings ---
+def can_move_to(pos):
+    for obs in obstacles:
+        if obs.kind in ['blade', 'cube', 'barrier', 'building']:
+            if distance(pos, obs.pos) < obs.size:
+                return False
+        if obs.kind == 'lava':
+            continue
+    return True
+
+# --- Update collision_check to block projectiles with buildings ---
+def check_obstacle_collision(pos, ignore_lava=False):
+    for obs in obstacles:
+        if obs.kind == 'lava' and not ignore_lava:
+            if abs(pos[0] - obs.pos[0]) < obs.size/2 and abs(pos[2] - obs.pos[2]) < obs.size/2:
+                return 'lava'
+        elif obs.kind in ['blade', 'cube', 'barrier', 'building']:
+            if distance(pos, obs.pos) < obs.size:
+                return obs.kind
+    return None
+
+def collision_check():
+    global player_health, game_over, victory
+    # Player hit by any enemy projectile
+    for enemy in enemy_tanks:
+        for p in enemy.projectiles[:]:
+            if distance(p, tank_pos) < 1.2:
+                player_health -= 20
+                enemy.projectiles.remove(p)
+                explosions.append(Explosion(tank_pos[0], tank_pos[2]))
+                if player_health <= 0:
+                    game_over = True
+    # Player hit by obstacle
+    obs_hit = check_obstacle_collision(tank_pos)
+    if obs_hit == 'lava':
+        player_health = 0
+        game_over = True
+    elif obs_hit:
+        player_health -= 1
+        if player_health <= 0:
+            game_over = True
+    # Player projectiles hit any enemy or obstacle
+    for enemy in enemy_tanks:
+        if not enemy.alive:
+            continue
+        for p in player_projectiles[:]:
+            if distance(p, enemy.pos) < 1.2:
+                enemy.health -= 20
+                player_projectiles.remove(p)
+                explosions.append(Explosion(enemy.pos[0], enemy.pos[2]))
+                if enemy.health <= 0:
+                    enemy.alive = False
+            elif check_obstacle_collision(p, ignore_lava=False):
+                player_projectiles.remove(p)
+    # Enemy tanks hit by obstacles
+    for enemy in enemy_tanks:
+        if not enemy.alive:
+            continue
+        obs_hit = check_obstacle_collision(enemy.pos)
+        if obs_hit == 'lava':
+            enemy.health = 0
+            enemy.alive = False
+        elif obs_hit:
+            enemy.health -= 1
+            if enemy.health <= 0:
+                enemy.alive = False
+    # Enemy projectiles hit obstacles
+    for enemy in enemy_tanks:
+        for p in enemy.projectiles[:]:
+            if check_obstacle_collision(p, ignore_lava=False):
+                enemy.projectiles.remove(p)
+    # Victory if all enemies are dead
+    if all(not e.alive for e in enemy_tanks):
+        victory = True
+        game_over = True
+
+# --- Utility: Draw game over/victory message ---
+def draw_game_message():
+    if game_over or victory:
+        glPushAttrib(GL_ALL_ATTRIB_BITS)
+        glDisable(GL_DEPTH_TEST)
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        gluOrtho2D(-5, 5, -3, 3)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        glColor3f(1, 1, 1)
+        glRasterPos2f(-2, 2.5)
+        msg = b"Victory!" if victory else b"Game Over"
+        for c in msg:
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c)
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        glPopAttrib()
+
+# --- Utility: Keep tank within arena ---
+def check_boundaries(pos):
+    pos[0] = max(-arena_size + 1, min(arena_size - 1, pos[0]))
+    pos[2] = max(-arena_size + 1, min(arena_size - 1, pos[2]))
+
+# --- GLUT Callbacks ---
 def display():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-    
-    setupCamera()
-    
-    draw_shapes()
-    
+    glLoadIdentity()
+    if not paused:
+        if camera_mode == "third_person":
+            rad = math.radians(tank_angle)
+            cam_x = tank_pos[0] - 5 * math.sin(rad)
+            cam_z = tank_pos[2] - 5 * math.cos(rad)
+            cam_y = 3.0
+            gluLookAt(cam_x, cam_y, cam_z, 
+                     tank_pos[0], tank_pos[1] + 1.0, tank_pos[2], 
+                     0, 1, 0)
+        else:
+            gluLookAt(tank_pos[0], 30, tank_pos[2] + 20, 
+                     tank_pos[0], 0, tank_pos[2], 
+                     0, 1, 0)
+        draw_arena()
+        draw_tank(tank_pos, tank_angle, (0, 1, 0))
+        draw_all_enemies()
+        draw_health_bar(tank_pos[0], tank_pos[2], player_health, (0, 1, 0))
+        draw_obstacles()
+        if game_mode == "capture_flag":
+            glPushMatrix()
+            glTranslatef(flag_pos[0], 1.0, flag_pos[2])
+            glColor3f(1, 1, 0)
+            glutSolidSphere(0.5, 16, 16)
+            glPopMatrix()
+        glColor3f(1, 1, 0)
+        for p in player_projectiles:
+            glPushMatrix()
+            glTranslatef(p[0], p[1], p[2])
+            glutSolidSphere(0.2, 8, 8)
+            glPopMatrix()
+        for enemy in enemy_tanks:
+            glColor3f(1, 0, 0)
+            for p in enemy.projectiles:
+                glPushMatrix()
+                glTranslatef(p[0], p[1], p[2])
+                glutSolidSphere(0.2, 8, 8)
+                glPopMatrix()
+        draw_explosions()
+        draw_game_message()
+    else:
+        draw_menu()
     glutSwapBuffers()
 
-def idle():
-    
-    update_projectiles()
-    
-    update_explosions()
-    
-    update_powerup()
-    check_powerup_collection()
-    
-    update_enemy_ai()
-    
-    check_win_condition()
-    
-    now = time.time()
-    if not game_state['enemies'] and now - game_state['last_wave_time'] > 3:
-        game_state['last_wave_time'] = now
-        spawn_wave()
-    
+def timer(v):
+    if not game_over:
+        update_enemy_ai()
+        move_projectiles()
+        collision_check()
     glutPostRedisplay()
+    glutTimerFunc(16, timer, 0)
+
+def keyboard(key, x, y):
+    global tank_angle, tank_pos, camera_mode, paused, menu_state, difficulty, game_mode
+    if key == b'\x1b':  # ESC key
+        paused = not paused
+        if paused:
+            menu_state = "main"
+    if paused:
+        if key == b'1':
+            if menu_state == "main":
+                paused = False
+            elif menu_state == "difficulty":
+                difficulty = "easy"
+            elif menu_state == "mode":
+                game_mode = "normal"
+        elif key == b'2':
+            if menu_state == "main":
+                menu_state = "difficulty"
+            elif menu_state == "difficulty":
+                difficulty = "medium"
+            elif menu_state == "mode":
+                game_mode = "capture_flag"
+        elif key == b'3':
+            if menu_state == "main":
+                menu_state = "mode"
+            elif menu_state == "difficulty":
+                difficulty = "hard"
+            elif menu_state == "mode":
+                menu_state = "main"
+        elif key == b'4':
+            if menu_state == "main":
+                reset_game()
+            elif menu_state == "difficulty":
+                menu_state = "main"
+    else:
+        rad = math.radians(tank_angle)
+        dx, dz = math.sin(rad), math.cos(rad)
+        perp_dx, perp_dz = math.sin(rad + math.pi/2), math.cos(rad + math.pi/2)
+        new_pos = tank_pos[:]
+        if key == b'w':
+            new_pos[0] += dx * 0.5
+            new_pos[2] += dz * 0.5
+            check_boundaries(new_pos)
+            if can_move_to(new_pos):
+                tank_pos[0], tank_pos[2] = new_pos[0], new_pos[2]
+        elif key == b's':
+            new_pos[0] -= dx * 0.5
+            new_pos[2] -= dz * 0.5
+            check_boundaries(new_pos)
+            if can_move_to(new_pos):
+                tank_pos[0], tank_pos[2] = new_pos[0], new_pos[2]
+        elif key == b'a':
+            tank_angle += 5
+        elif key == b'd':
+            tank_angle -= 5
+        elif key == b'q':  # Strafe left
+            new_pos[0] += perp_dx * 0.5
+            new_pos[2] += perp_dz * 0.5
+            check_boundaries(new_pos)
+            if can_move_to(new_pos):
+                tank_pos[0], tank_pos[2] = new_pos[0], new_pos[2]
+        elif key == b'e':  # Strafe right
+            new_pos[0] -= perp_dx * 0.5
+            new_pos[2] -= perp_dz * 0.5
+            check_boundaries(new_pos)
+            if can_move_to(new_pos):
+                tank_pos[0], tank_pos[2] = new_pos[0], new_pos[2]
+        elif key == b'v':
+            camera_mode = "bird_eye" if camera_mode == "third_person" else "third_person"
+
+def mouse(button, state, x, y):
+    if button == GLUT_LEFT_BUTTON and state == GLUT_DOWN and not game_over:
+        rad = math.radians(tank_angle)
+        dx, dz = math.sin(rad), math.cos(rad)
+        player_projectiles.append([tank_pos[0], 0.2, tank_pos[2], dx, dz])
+
+def reshape(w, h):
+    if h == 0: h = 1
+    glViewport(0, 0, w, h)
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    gluPerspective(60.0, float(w)/float(h), 1.0, 100.0)
+    glMatrixMode(GL_MODELVIEW)
 
 def init():
-    glClearColor(0.0, 0.0, 0.0, 0.0)
-    
+    glClearColor(0.1, 0.1, 0.1, 1)
     glEnable(GL_DEPTH_TEST)
-    
-    glEnable(GL_LIGHTING)
-    glEnable(GL_LIGHT0)
-    
-    light_position = [0, 100, 0, 1]
-    glLightfv(GL_LIGHT0, GL_POSITION, light_position)
-    
-    glEnable(GL_COLOR_MATERIAL)
-    glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE)
 
 def main():
-    glutInit()
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
+    glutInit(sys.argv)
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
     glutInitWindowSize(800, 600)
-    glutCreateWindow(b"3D Tank Battle Arena")
-    
+    glutCreateWindow(b"3D Tank Game with Health Bars & Explosions")
     init()
-    
     glutDisplayFunc(display)
-    glutIdleFunc(idle)
-    glutKeyboardFunc(keyboardListener)
-    glutSpecialFunc(specialKeyListener)
-    glutMouseFunc(mouseListener)
-    
+    glutKeyboardFunc(keyboard)
+    glutMouseFunc(mouse)
+    glutReshapeFunc(reshape)
+    glutTimerFunc(0, timer, 0)
     glutMainLoop()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
