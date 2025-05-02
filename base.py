@@ -15,6 +15,7 @@ game_state = {
     'camera_mode': True,
     'explosions': [],  
     'game_over': False,
+    'shake_frames_left': 0,
     'winner': None,
     'powerup': None,
     'powerup_spawn_time': time.time(),
@@ -188,9 +189,15 @@ def create_explosion(position):
     explosion = {
         'position': position,
         'scale': 0.1,
-        'lifetime': 30 
+        'lifetime': 15,
+        'brightness': 1.0
     }
     game_state['explosions'].append(explosion)
+
+    # Trigger shake effect
+    game_state['shake_frames_left'] = 10  # Shake lasts for 10 frames
+
+
 
 def update_explosions():
     explosions_to_remove = []
@@ -394,55 +401,29 @@ def update_powerup():
 # Drawing functions
 def draw_tank(tank):
     glPushMatrix()
-    
-    glTranslatef(tank['position'][0], 0, tank['position'][2])
-    
+    glTranslatef(*tank['position'])
     glRotatef(tank['rotation'], 0, 1, 0)
-    
-    if tank == game_state['tanks'][0]:
-        glColor3f(0.2, 0.2, 0.8)  # Blue for player
-    else:
-        glColor3f(0.8, 0.2, 0.2)  # Red for enemy
-    
-    glutSolidCube(TANK_RADIUS * 2)
-    
-    glColor3f(0.3, 0.3, 0.3)
-    glTranslatef(0, TANK_RADIUS, 0)
+
+    # Base - Wide rectangle
+    glColor3f(0.2, 0.2, 0.8) if tank == game_state['tanks'][0] else glColor3f(0.8, 0.2, 0.2)
+    glPushMatrix()
+    glScalef(2, 1, 3)
     glutSolidCube(TANK_RADIUS)
-    
+    glPopMatrix()
+
+    # Turret - Cylinder on top
+    glColor3f(0.3, 0.3, 0.3)
+    glTranslatef(0, TANK_RADIUS / 1.5, 0)
+    glutSolidSphere(TANK_RADIUS / 1.5, 12, 12)
+
+    # Barrel - Long cylinder forward
     glTranslatef(0, 0, TANK_RADIUS)
     glRotatef(90, 1, 0, 0)
     quadric = gluNewQuadric()
-    gluCylinder(quadric, TANK_RADIUS / 3, TANK_RADIUS / 3, TANK_RADIUS * 2, 10, 10)
-    
+    gluCylinder(quadric, 0.2, 0.2, TANK_RADIUS * 2.5, 8, 8)
+
     glPopMatrix()
 
-    glPushMatrix()
-    
-    glTranslatef(tank['position'][0], 0, tank['position'][2])
-    
-    glRotatef(-tank['rotation'], 0, 1, 0)
-    
-    glTranslatef(0, TANK_RADIUS * 2.5, 0)
-    
-    #health bar color (green to red)
-    health_ratio = max(0, min(1, tank['health'] / 100))
-    red = 1.0 - health_ratio
-    green = health_ratio
-    glColor3f(red, green, 0.0)
-    
-    #horizontal rectangle as health bar
-    bar_width = 4.0 * health_ratio
-    bar_height = 0.5
-    
-    glBegin(GL_QUADS)
-    glVertex3f(-2.0, 0, 0)
-    glVertex3f(-2.0 + bar_width, 0, 0)
-    glVertex3f(-2.0 + bar_width, bar_height, 0)
-    glVertex3f(-2.0, bar_height, 0)
-    glEnd()
-    
-    glPopMatrix()
 
 def draw_projectile(projectile):
     glPushMatrix()
@@ -461,22 +442,19 @@ def draw_projectile(projectile):
 
 def draw_explosion(explosion):
     glPushMatrix()
-    
     glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    
-    glTranslatef(explosion['position'][0], 0, explosion['position'][2])
-    
-    alpha = max(0.0, explosion['lifetime'] / 30.0)
-    
-    glColor4f(1.0, 0.5, 0.0, alpha)
-    
-    scale = explosion['scale'] * 1.5
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE)
+
+    glTranslatef(*explosion['position'])
+    scale = explosion['scale']
+    alpha = explosion['lifetime'] / 15.0
+    glColor4f(1.0, 0.6, 0.0, alpha)
+
     glutSolidSphere(scale, 10, 10)
-    
+
     glDisable(GL_BLEND)
-    
     glPopMatrix()
+
 
 def draw_obstacle(obstacle):
     glPushMatrix()
@@ -606,7 +584,7 @@ def setupCamera():
     glLoadIdentity()
     
     if game_state['camera_mode']:
-        #Third-person camera
+        # Third-person camera
         tank_pos = game_state['tanks'][0]['position']
         tank_rot = game_state['tanks'][0]['rotation']
         
@@ -616,19 +594,29 @@ def setupCamera():
         
         camera_x = tank_pos[0] - camera_distance * math.sin(rot_rad)
         camera_z = tank_pos[2] - camera_distance * math.cos(rot_rad)
+
+        # Apply camera shake AFTER computing base position
+        camera_x += get_camera_offset()
+        camera_z += get_camera_offset()
         
         gluLookAt(
-            camera_x, camera_height, camera_z,  
-            tank_pos[0], 0, tank_pos[2],        
-            0, 1, 0                             
+            camera_x, camera_height, camera_z,
+            tank_pos[0], 0, tank_pos[2],
+            0, 1, 0
         )
     else:
         # Top-down view
         gluLookAt(
-            0, 80, 0,    
-            0, 0, 0,      
-            0, 0, -1    
+            0, 80, 0,
+            0, 0, 0,
+            0, 0, -1
         )
+
+def get_camera_offset():
+    if game_state['shake_frames_left'] > 0:
+        game_state['shake_frames_left'] -= 1
+        return random.uniform(-0.3, 0.3)
+    return 0
 
 def draw_shapes():
     draw_arena()
