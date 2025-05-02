@@ -20,8 +20,7 @@ Ongoing project using the OpenGL library of python
 | A   | Rotate left |
 | D   | Rotate right |
 | R   | Reset game |
-| C   | Increment player score (debug) |
-| V   | Increment enemy score (debug) |
+
 
 #### Special Keys
 | Key | Action |
