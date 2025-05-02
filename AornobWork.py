@@ -2,8 +2,8 @@ import math
 import time
 import random
 from OpenGL.GL import *
-from OpenGL.GLUT import *  # Import all GLUT functions
-from OpenGL.GLUT.fonts import GLUT_BITMAP_HELVETICA_18  # Explicitly import the font
+from OpenGL.GLUT import *  
+from OpenGL.GLUT.fonts import GLUT_BITMAP_HELVETICA_18 
 from OpenGL.GLU import *
 
 game_state = {
