@@ -38,14 +38,14 @@ game_state = {
     'enemy_mode': 'chasing',
     'avoiding_frames': 0,
     'avoiding_direction': 0,
-    # Pause menu state
+    
     'paused': False,
     'pause_menu_index': 0,
-    'pause_menu_mode': 'main',  # 'main', 'difficulty', 'gamemode'
-    'difficulty': 'easy',  # 'easy', 'medium', 'hard'
-    'game_mode': 'normal',  # 'normal', 'ctf'
+    'pause_menu_mode': 'main', 
+    'difficulty': 'easy', 
+    'game_mode': 'normal',  
     'flag': {
-        'status': None,  # None, 'held_by_enemy', 'dropped', 'held_by_player'
+        'status': None, 
         'position': None,
         'holder': None,
         'hold_timer': 0.0
@@ -60,7 +60,7 @@ obstacles = [
     {'type': 'cube', 'x': 0, 'z': -25, 'size': 4}
 ]
 
-# Enemy projectile damage by difficulty (greatly reduced)
+
 ENEMY_PROJECTILE_DAMAGE = {
     'easy': 2,
     'medium': 4,
@@ -72,9 +72,9 @@ ENEMY_FIRE_COOLDOWN = {
     'hard': 10.0
 }
 ENEMY_MISS_CHANCE = {
-    'easy': 0.4,   # 40% miss
-    'medium': 0.3, # 30% miss
-    'hard': 0.2    # 20% miss
+    'easy': 0.4,   
+    'medium': 0.3, 
+    'hard': 0.2   
 }
 
 def check_boundary_collision(pos):
@@ -105,25 +105,25 @@ def draw_arena():
         glVertex3f(GRID_LENGTH, 0.01, i)
     glEnd()
     glColor3f(0.7, 0.7, 0.7)
-    # North wall
+   
     glPushMatrix()
     glTranslatef(0, 5, -GRID_LENGTH)
     glScalef(2 * GRID_LENGTH, 10, 1)
     glutSolidCube(1)
     glPopMatrix()
-    # South wall
+    
     glPushMatrix()
     glTranslatef(0, 5, GRID_LENGTH)
     glScalef(2 * GRID_LENGTH, 10, 1)
     glutSolidCube(1)
     glPopMatrix()
-    # East wall
+    
     glPushMatrix()
     glTranslatef(GRID_LENGTH, 5, 0)
     glScalef(1, 10, 2 * GRID_LENGTH)
     glutSolidCube(1)
     glPopMatrix()
-    # West wall
+    
     glPushMatrix()
     glTranslatef(-GRID_LENGTH, 5, 0)
     glScalef(1, 10, 2 * GRID_LENGTH)
@@ -155,7 +155,7 @@ def draw_tank(tank):
     quadric = gluNewQuadric()
     gluCylinder(quadric, TANK_RADIUS / 3, TANK_RADIUS / 3, TANK_RADIUS * 2, 10, 10)
     glPopMatrix()
-    # Healthbar
+    
     glPushMatrix()
     glTranslatef(tank['position'][0], 0, tank['position'][2])
     glRotatef(-tank['rotation'], 0, 1, 0)
@@ -288,7 +288,7 @@ def draw_text(text, x, y):
     glMatrixMode(GL_MODELVIEW)
 
 def draw_minimap():
-    # Minimap boundaries
+
     minimap_left = 600
     minimap_right = 780
     minimap_bottom = 500
@@ -310,7 +310,7 @@ def draw_minimap():
     glPushMatrix()
     glLoadIdentity()
 
-    # Draw minimap background
+    
     glColor3f(0.1, 0.1, 0.1)
     glBegin(GL_QUADS)
     glVertex2f(minimap_left, minimap_bottom)
@@ -319,7 +319,7 @@ def draw_minimap():
     glVertex2f(minimap_left, minimap_top)
     glEnd()
 
-    # Draw grid lines
+    
     glColor3f(0.3, 0.3, 0.3)
     grid_step = minimap_width // 6
     for i in range(0, 7):
@@ -336,12 +336,12 @@ def draw_minimap():
         glVertex2f(minimap_right, y)
         glEnd()
 
-    # Draw North indicator at top center
+    
     glColor3f(1.0, 1.0, 1.0)
     glRasterPos2f((minimap_left + minimap_right) / 2 - 5, minimap_top - 10)
     glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord('N'))
 
-    # Draw obstacles as small squares
+
     glColor3f(0.5, 0.5, 0.5)
     for obs in obstacles:
         x, z = world_to_minimap(obs['x'], obs['z'])
@@ -353,20 +353,20 @@ def draw_minimap():
         glVertex2f(x - size/2, z + size/2)
         glEnd()
 
-    # Draw projectiles as dots
+    
     for proj in game_state['projectiles']:
         x, z = world_to_minimap(proj['position'][0], proj['position'][2])
         if proj['owner'] == 0:
-            glColor3f(0.0, 0.7, 1.0)  # Player: blue
+            glColor3f(0.0, 0.7, 1.0)  
         else:
-            glColor3f(1.0, 0.2, 0.2)  # Enemy: red
+            glColor3f(1.0, 0.2, 0.2)  
         glBegin(GL_POLYGON)
         for a in range(12):
             angle = 2 * math.pi * a / 12
             glVertex2f(x + 3 * math.cos(angle), z + 3 * math.sin(angle))
         glEnd()
 
-    # Draw player tank (green triangle)
+    
     player = game_state['tanks'][0]
     x, z = world_to_minimap(player['position'][0], player['position'][2])
     glColor3f(0.0, 1.0, 0.0)
@@ -380,7 +380,7 @@ def draw_minimap():
     glEnd()
     glPopMatrix()
 
-    # Draw enemy tanks (red triangles)
+    
     for i, enemy in enumerate(game_state['tanks'][1:], 1):
         x, z = world_to_minimap(enemy['position'][0], enemy['position'][2])
         glColor3f(1.0, 0.0, 0.0)
@@ -400,7 +400,7 @@ def draw_minimap():
     glMatrixMode(GL_MODELVIEW)
 
 def draw_pause_menu():
-    # Draw semi-transparent overlay
+    
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
     glLoadIdentity()
@@ -418,7 +418,7 @@ def draw_pause_menu():
     glVertex2f(0, 600)
     glEnd()
     glDisable(GL_BLEND)
-    # Draw menu box
+    
     glColor3f(0.2, 0.2, 0.2)
     glBegin(GL_QUADS)
     glVertex2f(250, 180)
@@ -426,7 +426,7 @@ def draw_pause_menu():
     glVertex2f(550, 420)
     glVertex2f(250, 420)
     glEnd()
-    # Menu options
+    
     main_options = ["Resume", "Restart", "Difficulty Settings", "Game Mode"]
     diff_options = ["Easy", "Medium", "Hard"]
     mode_options = ["Normal", "Capture the Flag"]
@@ -438,7 +438,7 @@ def draw_pause_menu():
         for i, opt in enumerate(main_options):
             y = y_start - i * 50
             if i == game_state['pause_menu_index']:
-                # Draw yellow triangle indicator
+                
                 glColor3f(1, 1, 0)
                 glBegin(GL_TRIANGLES)
                 glVertex2f(x_arrow, y + 7)
@@ -492,11 +492,11 @@ def draw_hud():
         time_left = int(game_state['powerup_speed_end_time'] - time.time())
         draw_text(f"Speed Boost: {time_left}s", 10, 520)
     draw_text(f"Enemy Mode: {game_state['enemy_mode']}", 10, 500)
-    # CTF HUD
+    
     if game_state.get('game_mode', 'normal') == 'ctf':
         flag = game_state['flag']
         if flag['status'] == 'held_by_player':
-            draw_text(f"Flag held! Hold for {max(0, int(1000-flag['hold_timer']))}s to win!", 250, 560)
+            draw_text(f"Flag held! Hold for {max(0, int(10-flag['hold_timer']))}s to win!", 250, 560)
         elif flag['status'] == 'dropped':
             draw_text(f"Flag dropped! Pick it up!", 250, 560)
         elif flag['status'] == 'held_by_enemy':
@@ -544,7 +544,7 @@ def draw_shapes():
     for tank in game_state['tanks']:
         draw_tank(tank)
  
-    # Draw flag if in CTF mode
+    
     if game_state.get('game_mode', 'normal') == 'ctf' and game_state['flag']['status']:
         if game_state['flag']['status'] == 'dropped':
             draw_flag('dropped', flag_pos=game_state['flag']['position'])
@@ -675,7 +675,7 @@ def update_projectiles():
 def update_enemy_ai():
     if game_state['game_over']:
         return
-    # For each enemy tank (all except player)
+    
     for idx, enemy in enumerate(game_state['tanks'][1:], 1):
         player = game_state['tanks'][0]
         if 'enemy_mode' not in enemy:
@@ -692,7 +692,7 @@ def update_enemy_ai():
         current_angle = enemy['rotation']
         angle_diff = (target_angle - current_angle + 180) % 360 - 180
         distance = math.sqrt(dx**2 + dz**2)
-        # Smoother rotation and movement
+        
         ROT_SPEED = 1.2 if game_state['difficulty'] == 'easy' else 1.5 if game_state['difficulty'] == 'medium' else 1.0
         MOVE_SPEED = TANK_SPEED * (0.4 if game_state['difficulty'] == 'hard' else 0.5)
         if enemy['enemy_mode'] == 'chasing':
@@ -712,15 +712,15 @@ def update_enemy_ai():
                     enemy['avoiding_direction'] = random.choice([1, -1])
                 else:
                     enemy['position'] = tuple(pos)
-            # Fire cooldown
+            
             if enemy['fire_cooldown'] > 0:
                 enemy['fire_cooldown'] -= 1/60.0
             if abs(angle_diff) < 5 and distance < 40 and enemy['fire_cooldown'] <= 0:
-                # MISS CHANCE
+                
                 miss_chance = ENEMY_MISS_CHANCE.get(game_state['difficulty'], 0.3)
                 fire_angle = enemy['rotation']
                 if random.random() < miss_chance:
-                    fire_angle += random.uniform(-40, 40)  # Miss by up to ±40 degrees
+                    fire_angle += random.uniform(-40, 40)  
                 direction = (
                     math.sin(math.radians(fire_angle)),
                     0,
@@ -777,16 +777,16 @@ def keyboardListener(key, x, y):
                 if selected != game_state['difficulty']:
                     game_state['difficulty'] = selected
                     if selected == 'medium':
-                        # Increase enemy fire rate
-                        pass  # Will implement in AI logic
+                        
+                        pass 
                     elif selected == 'hard':
-                        # Add 2 more tanks if not already present
+                        
                         while len(game_state['tanks']) < 4:
                             import random
                             pos = (random.uniform(-GRID_LENGTH+5, GRID_LENGTH-5), 0, random.uniform(-GRID_LENGTH+5, GRID_LENGTH-5))
                             game_state['tanks'].append({'position': pos, 'rotation': random.randint(0, 359), 'health': 100})
                     elif selected == 'easy':
-                        # Remove extra tanks if present
+                        
                         game_state['tanks'] = game_state['tanks'][:2]
                 game_state['pause_menu_mode'] = 'main'
                 game_state['pause_menu_index'] = 2
@@ -796,17 +796,17 @@ def keyboardListener(key, x, y):
                 game_state['pause_menu_mode'] = 'main'
                 game_state['pause_menu_index'] = 3
             glutPostRedisplay()
-        elif key == b'\x1b':  # ESC in menu
+        elif key == b'\x1b':  
             if game_state['pause_menu_mode'] == 'main':
                 game_state['paused'] = False
             else:
                 game_state['pause_menu_mode'] = 'main'
                 game_state['pause_menu_index'] = 0
             glutPostRedisplay()
-        elif key == b'w':  # Up
+        elif key == b'w':  # up
             game_state['pause_menu_index'] = (game_state['pause_menu_index'] - 1) % (4 if game_state['pause_menu_mode']=='main' else 3 if game_state['pause_menu_mode']=='difficulty' else 2)
             glutPostRedisplay()
-        elif key == b's':  # Down
+        elif key == b's':  # down
             game_state['pause_menu_index'] = (game_state['pause_menu_index'] + 1) % (4 if game_state['pause_menu_mode']=='main' else 3 if game_state['pause_menu_mode']=='difficulty' else 2)
             glutPostRedisplay()
         return
@@ -907,14 +907,14 @@ def draw_flag(flag_status, flag_pos=None, tank=None):
     else:
         glPopMatrix()
         return
-    # Draw flag pole (thin cylinder)
+    
     glColor3f(0.8, 0.8, 0.8)
     glPushMatrix()
     glRotatef(-90, 1, 0, 0)
     quadric = gluNewQuadric()
     gluCylinder(quadric, 0.08, 0.08, 2.5, 8, 1)
     glPopMatrix()
-    # Draw flag (triangle)
+
     glColor3f(1.0, 1.0, 0.0)
     glBegin(GL_TRIANGLES)
     glVertex3f(0, 2.2, 0)
@@ -927,19 +927,19 @@ def check_flag_logic():
     if game_state.get('game_mode', 'normal') != 'ctf':
         return
     flag = game_state['flag']
-    # Initial state: enemy holds flag
+    
     if flag['status'] is None:
         flag['status'] = 'held_by_enemy'
         flag['holder'] = 1
         flag['position'] = None
         flag['hold_timer'] = 0.0
-    # If flag is held by player, increment timer
+    
     if flag['status'] == 'held_by_player':
         flag['hold_timer'] += 1/60.0
-        if flag['hold_timer'] >= 1000.0:
+        if flag['hold_timer'] >= 10.0:
             game_state['game_over'] = True
             game_state['winner'] = 0
-    # If flag is dropped, check if player picks it up
+    
     if flag['status'] == 'dropped' and flag['position'] is not None:
         player_pos = game_state['tanks'][0]['position']
         dist = math.sqrt((player_pos[0] - flag['position'][0])**2 + (player_pos[2] - flag['position'][2])**2)
