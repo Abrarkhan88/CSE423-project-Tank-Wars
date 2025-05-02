@@ -36,20 +36,20 @@ Ongoing project using the OpenGL library of python
 
 ---
 
-## 📷 Camera Modes
+## Camera Modes
 - **Third-Person View**: Camera follows behind and above the player tank
 - **Top-Down View**: Static orthographic overview of the full arena
 
 ---
 
-## 💣 Combat and Collisions
+## Combat and Collisions
 - Bullets are fired by both tanks and cause 20 damage on hit
 - Collisions detected with tanks, obstacles, and arena boundaries
 - Explosions appear at impact points with fading effect
 
 ---
 
-## 🧠 Enemy AI
+## Enemy AI
 - Rotates to face and pursue the player
 - Avoids obstacles dynamically
 - Fires projectiles when aligned and within range
@@ -57,7 +57,7 @@ Ongoing project using the OpenGL library of python
 
 ---
 
-## 🧱 Arena Design
+## Arena Design
 - Large grid-based battlefield
 - 4 boundary walls prevent escaping
 - Randomly placed cube obstacles
@@ -65,7 +65,7 @@ Ongoing project using the OpenGL library of python
 
 ---
 
-## 🎁 Power-Ups
+## Power-Ups
 - Randomly spawn every 15–20 seconds
 - Disappear if uncollected in 15 seconds
 - Effects:
@@ -75,7 +75,7 @@ Ongoing project using the OpenGL library of python
 
 ---
 
-## 🧾 HUD and UI
+## HUD and UI
 - Score display for both tanks
 - Health values
 - Speed boost countdown
@@ -84,15 +84,9 @@ Ongoing project using the OpenGL library of python
 
 ---
 
-## 🛠️ Technologies Used
+## Technologies Used
 - Python 3
 - PyOpenGL
 - GLUT
 
----
 
-## 🚀 How to Run
-
-1. Install dependencies:
-   ```bash
-   pip install PyOpenGL PyOpenGL_accelerate
