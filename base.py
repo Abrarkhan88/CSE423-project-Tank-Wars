@@ -5,18 +5,11 @@ from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
 
-<<<<<<< Updated upstream
-=======
-# Constants
->>>>>>> Stashed changes
 GRID_LENGTH = 50
 TANK_RADIUS = 2
 BULLET_SPEED = 0.5
 TANK_SPEED = 0.5
-<<<<<<< Updated upstream
-=======
 
->>>>>>> Stashed changes
 camera_distance = 15
 camera_height = 10
 MIN_CAMERA_DISTANCE = 5
@@ -24,10 +17,6 @@ MAX_CAMERA_DISTANCE = 30
 MIN_CAMERA_HEIGHT = 5
 MAX_CAMERA_HEIGHT = 30
 
-<<<<<<< Updated upstream
-
-=======
->>>>>>> Stashed changes
 game_state = {
     'tanks': [
         {'position': (0, 0, 0), 'rotation': 0, 'health': 100},
@@ -38,10 +27,6 @@ game_state = {
     'camera_mode': True,
     'explosions': [],
     'game_over': False,
-<<<<<<< Updated upstream
-    'winner': None
-}
-=======
     'winner': None,
     'powerup': None,
     'powerup_spawn_time': time.time(),
@@ -54,7 +39,6 @@ game_state = {
     'avoiding_direction': 0
 }
 
->>>>>>> Stashed changes
 obstacles = [
     {'type': 'cube', 'x': 10, 'z': 10, 'size': 3},
     {'type': 'cube', 'x': -15, 'z': -15, 'size': 4},
@@ -63,8 +47,6 @@ obstacles = [
     {'type': 'cube', 'x': 0, 'z': -25, 'size': 4}
 ]
 
-<<<<<<< Updated upstream
-=======
 def check_boundary_collision(pos):
     return abs(pos[0]) > GRID_LENGTH or abs(pos[2]) > GRID_LENGTH
 
@@ -75,7 +57,6 @@ def check_obstacle_collision(pos):
             return True
     return False
 
->>>>>>> Stashed changes
 def draw_arena():
     glPushMatrix()
     glColor3f(0.3, 0.7, 0.3)
@@ -94,46 +75,30 @@ def draw_arena():
         glVertex3f(GRID_LENGTH, 0.01, i)
     glEnd()
     glColor3f(0.7, 0.7, 0.7)
-<<<<<<< Updated upstream
-=======
     # North wall
->>>>>>> Stashed changes
     glPushMatrix()
     glTranslatef(0, 5, -GRID_LENGTH)
     glScalef(2 * GRID_LENGTH, 10, 1)
     glutSolidCube(1)
     glPopMatrix()
-<<<<<<< Updated upstream
-=======
     # South wall
->>>>>>> Stashed changes
     glPushMatrix()
     glTranslatef(0, 5, GRID_LENGTH)
     glScalef(2 * GRID_LENGTH, 10, 1)
     glutSolidCube(1)
     glPopMatrix()
-<<<<<<< Updated upstream
-=======
     # East wall
->>>>>>> Stashed changes
     glPushMatrix()
     glTranslatef(GRID_LENGTH, 5, 0)
     glScalef(1, 10, 2 * GRID_LENGTH)
     glutSolidCube(1)
     glPopMatrix()
-<<<<<<< Updated upstream
-=======
     # West wall
->>>>>>> Stashed changes
     glPushMatrix()
     glTranslatef(-GRID_LENGTH, 5, 0)
     glScalef(1, 10, 2 * GRID_LENGTH)
     glutSolidCube(1)
     glPopMatrix()
-<<<<<<< Updated upstream
-    
-=======
->>>>>>> Stashed changes
     glPopMatrix()
 
 def draw_obstacle(obstacle):
@@ -143,8 +108,6 @@ def draw_obstacle(obstacle):
     glutSolidCube(obstacle['size'])
     glPopMatrix()
 
-<<<<<<< Updated upstream
-=======
 def draw_tank(tank):
     glPushMatrix()
     glTranslatef(tank['position'][0], 0, tank['position'][2])
@@ -308,17 +271,12 @@ def draw_hud():
             text = f"PLAYER {winner + 1} WINS! Press R to restart"
             draw_text(text, 250, 300)
 
->>>>>>> Stashed changes
 def setupCamera():
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
     gluPerspective(45, 800/600, 0.1, 1000)
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
-<<<<<<< Updated upstream
-    
-=======
->>>>>>> Stashed changes
     if game_state['camera_mode']:
         tank_pos = game_state['tanks'][0]['position']
         tank_rot = game_state['tanks'][0]['rotation']
@@ -326,19 +284,6 @@ def setupCamera():
         rot_rad = math.radians(tank_rot)
         camera_x = tank_pos[0] - camera_distance * math.sin(rot_rad)
         camera_z = tank_pos[2] - camera_distance * math.cos(rot_rad)
-<<<<<<< Updated upstream
-        
-        gluLookAt(
-            camera_x, camera_height, camera_z,  
-            tank_pos[0], 0, tank_pos[2],        
-            0, 1, 0                             
-        )
-    else:
-        gluLookAt(
-            0, 80, 0,    # Camera position
-            0, 0, 0,      # Look at center
-            0, 0, -1      # Up vector
-=======
         gluLookAt(
             camera_x, camera_height, camera_z,
             tank_pos[0], 0, tank_pos[2],
@@ -349,53 +294,33 @@ def setupCamera():
             0, 80, 0,
             0, 0, 0,
             0, 0, -1
->>>>>>> Stashed changes
         )
 
 def draw_shapes():
     draw_arena()
-<<<<<<< Updated upstream
-    for obs in obstacles:
-        draw_obstacle(obs)
-
-def display():
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-=======
-
-    for obs in obstacles:
-        draw_obstacle(obs)
-
-    draw_powerup()
     
+    for obs in obstacles:
+        draw_obstacle(obs)
+    
+    draw_powerup()
+   
     for tank in game_state['tanks']:
         draw_tank(tank)
-    
+ 
     for proj in game_state['projectiles']:
         draw_projectile(proj)
-    
+   
     for explosion in game_state['explosions']:
         draw_explosion(explosion)
-
+   
     draw_hud()
 
 def display():
     glClear(GL_COLOR_BUFFER_BIT)
->>>>>>> Stashed changes
     setupCamera()
     draw_shapes()
     glutSwapBuffers()
 
-<<<<<<< Updated upstream
-def init():
-    glClearColor(0.0, 0.0, 0.0, 0.0)
-    glEnable(GL_DEPTH_TEST)
-    glEnable(GL_LIGHTING)
-    glEnable(GL_LIGHT0)
-    light_position = [0, 100, 0, 1]
-    glLightfv(GL_LIGHT0, GL_POSITION, light_position)
-    glEnable(GL_COLOR_MATERIAL)
-    glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE)
-=======
 def check_projectile_tank_collision(proj_pos, tank_pos):
     distance = math.sqrt((proj_pos[0] - tank_pos[0])**2 + (proj_pos[2] - tank_pos[2])**2)
     return distance < TANK_RADIUS
@@ -609,17 +534,11 @@ def idle():
 
 def init():
     glClearColor(0.0, 0.0, 0.0, 0.0)
->>>>>>> Stashed changes
 
 def main():
     glutInit()
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB)
     glutInitWindowSize(800, 600)
-<<<<<<< Updated upstream
-    glutCreateWindow(b"Tank Wars")
-    init()
-    glutDisplayFunc(display)
-=======
     glutCreateWindow(b"3D Tank Battle Arena")
     init()
     glutDisplayFunc(display)
@@ -627,7 +546,6 @@ def main():
     glutKeyboardFunc(keyboardListener)
     glutSpecialFunc(specialKeyListener)
     glutMouseFunc(mouseListener)
->>>>>>> Stashed changes
     glutMainLoop()
 
 if __name__ == "__main__":
