@@ -41,18 +41,18 @@ game_state = {
     'enemy_mode': 'chasing',
     'avoiding_frames': 0,
     'avoiding_direction': 0,
-    'boss_active': False,  # New flag for boss mode
-    'boss': None,          # New field to store boss data
-    'enemy_fire_rate': 0.01,  # New field for enemy fire rate
-    'boss_fire_rate': 0.05,   # New field for boss fire rate
-    'auto_teleport_enabled': False,  # New flag for auto-teleport
-    'last_auto_teleport_time': time.time(),  # New field for teleport timing
-    'portal_active': False,  # New field for portal visualization
-    'portal_position': (0, 0, 0),  # New field for portal position
-    'portal_timer': 0  # New field for portal animation
+    'boss_active': False,  
+    'boss': None,          
+    'enemy_fire_rate': 0.01,  
+    'boss_fire_rate': 0.05,   
+    'auto_teleport_enabled': False,  
+    'last_auto_teleport_time': time.time(),  
+    'portal_active': False,  
+    'portal_position': (0, 0, 0),  
+    'portal_timer': 0  
 }
 
-# Enhanced obstacles with dynamic properties
+
 obstacles = [
     {'type': 'cube', 'x': 10, 'z': 10, 'size': 3, 'dynamic': False},
     {'type': 'cube', 'x': -15, 'z': -15, 'size': 4, 'dynamic': True, 'speed': 0.3, 'direction': (1, 0), 'direction_change_time': time.time()},
